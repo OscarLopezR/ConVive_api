@@ -1,6 +1,7 @@
 from datetime import date, datetime
+from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -97,6 +98,30 @@ class RegistroCorreo(Base):
     estado_envio: Mapped[str] = mapped_column(String(10), default="PENDIENTE")
     fecha_envio: Mapped[datetime] = mapped_column(DateTime)
     ID_usuario: Mapped[int] = mapped_column(ForeignKey("USUARIO.ID"))
+
+
+class Habitacion(Base):
+    __tablename__ = "HABITACION"
+
+    id: Mapped[int] = mapped_column("ID", Integer, primary_key=True, autoincrement=True)
+    titulo: Mapped[str] = mapped_column(String(100))
+    descripcion: Mapped[str | None] = mapped_column(Text)
+    precio: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    metros: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+    disponibilidad: Mapped[bool] = mapped_column(Boolean, default=True)
+    reglas: Mapped[str | None] = mapped_column(Text)
+    serv_agua: Mapped[bool] = mapped_column(Boolean, default=False)
+    serv_luz: Mapped[bool] = mapped_column(Boolean, default=False)
+    serv_internet: Mapped[bool] = mapped_column(Boolean, default=False)
+    serv_gas: Mapped[bool] = mapped_column(Boolean, default=False)
+    calle: Mapped[str | None] = mapped_column(String(100))
+    colonia: Mapped[str | None] = mapped_column(String(100))
+    delegacion: Mapped[str | None] = mapped_column(String(100))
+    estado: Mapped[str | None] = mapped_column(String(100))
+    c_p: Mapped[str | None] = mapped_column(String(10))
+    ID_arrendador: Mapped[int] = mapped_column(ForeignKey("USUARIO.ID"))
+
+    arrendador: Mapped[Usuario] = relationship(lazy="joined")
 
 
 class TokenRecuperacion(Base):

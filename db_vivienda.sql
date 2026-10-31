@@ -451,6 +451,17 @@ VALUES
 
 (TRUE, 20, 30, 'Indistinto', 4);
 
+-- Valores de ejemplo con los codigos que usa el front (para el calculo de compatibilidad)
+UPDATE PERFIL SET ocupacion='student', habito_limpieza='high', frecuencia_visitas='medium', horario_actividad='day' WHERE ID_usuario = 1;
+UPDATE PERFIL SET habito_limpieza='high', frecuencia_visitas='medium', horario_actividad='day' WHERE ID_usuario = 2;
+UPDATE PERFIL SET habito_limpieza='medium', frecuencia_visitas='low', horario_actividad='night' WHERE ID_usuario = 3;
+UPDATE PERFIL SET ocupacion='student', habito_limpieza='high', frecuencia_visitas='medium', horario_actividad='day' WHERE ID_usuario = 4;
+
+UPDATE PREFERENCIAS SET ocupacion_preferida='student', horario_preferido='day', limpieza_preferida='high',
+    visitas_permitidas='none', mascotas_permitidas='small', fumar=FALSE, edad_minima=21, edad_maxima=30 WHERE ID_usuario = 2;
+UPDATE PREFERENCIAS SET ocupacion_preferida='any', horario_preferido='night', limpieza_preferida='medium',
+    visitas_permitidas='none', mascotas_permitidas='no', fumar=FALSE WHERE ID_usuario = 3;
+
 -- 13. POBLAR TABLA HABITACION
 
 INSERT INTO HABITACION
