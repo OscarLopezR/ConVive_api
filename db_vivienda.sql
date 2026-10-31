@@ -80,6 +80,27 @@ CREATE TABLE TOKEN_RECUPERACION (
         ON UPDATE CASCADE
 );
 
+-- TABLA ACCION_ADMIN (auditoria de acciones de moderacion)
+
+CREATE TABLE ACCION_ADMIN (
+    ID INT AUTO_INCREMENT,
+    accion VARCHAR(50) NOT NULL,
+    tipo_objetivo VARCHAR(30) NOT NULL,
+    id_objetivo INT NOT NULL,
+    detalle VARCHAR(255),
+    fecha DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ID_admin INT NOT NULL,
+
+    CONSTRAINT PK_ACCION_ADMIN
+        PRIMARY KEY (ID),
+
+    CONSTRAINT FK_ACCION_ADMIN_USUARIO
+        FOREIGN KEY (ID_admin)
+        REFERENCES USUARIO(ID)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
+);
+
 -- 5. TABLA PERFIL
 
 CREATE TABLE PERFIL (
@@ -366,7 +387,8 @@ CREATE TABLE REGISTRO_CORREO (
 
 INSERT INTO ROL (nombreRol, descripcionRol) VALUES
 ('INQUILINO', 'Busca una habitacion compatible con su estilo de vida'),
-('ARRENDADOR', 'Publica habitaciones y recibe solicitudes');
+('ARRENDADOR', 'Publica habitaciones y recibe solicitudes'),
+('ADMIN', 'Administra usuarios y supervisa la plataforma');
 
 -- claveDeUsuario es un marcador: ejecuta `python -m app.seed` para asignar
 -- el hash bcrypt real (contrasena de prueba: Convive123).
@@ -387,10 +409,14 @@ VALUES
 
 ('sofia.g', 'Sofia', 'Gomez', 'Perez',
  'sofia.g@email.com', 'PENDIENTE_SEED',
- '5545678901', 'sofia.jpg', '2002-11-05');
+ '5545678901', 'sofia.jpg', '2002-11-05'),
+
+('admin', 'Admin', 'ConVive', NULL,
+ 'admin@convive.com', 'PENDIENTE_SEED',
+ NULL, NULL, '1990-01-01');
 
 INSERT INTO USUARIO_ROL (idUsuario, idRol) VALUES
-(1, 1), (2, 2), (3, 2), (4, 1);
+(1, 1), (2, 2), (3, 2), (4, 1), (5, 3);
 
 -- 11. POBLAR TABLA PERFIL
 

@@ -1,15 +1,15 @@
 import re
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..database import get_db
-from ..email_service import send_reset_email
-from ..models import Perfil, Preferencias, Rol, TokenRecuperacion, Usuario
+from ..email_service import RESET_SUBJECT, deliver_reset_email
+from ..models import Perfil, Preferencias, RegistroCorreo, Rol, TokenRecuperacion, Usuario
 from ..schemas import (
     ForgotIn,
     LoginIn,
@@ -32,6 +32,10 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 bearer = HTTPBearer(auto_error=False)
 
 ROLE_NAMES = {"tenant": "INQUILINO", "landlord": "ARRENDADOR"}
+
+# Máximo de correos de recuperación por usuario dentro de la ventana (minutos).
+RESET_MAX_REQUESTS = 3
+RESET_WINDOW_MINUTES = 15
 
 
 def _user_out(user: Usuario) -> UserOut:
@@ -82,9 +86,20 @@ def get_current_user(
     return user
 
 
+def require_role(role_name: str):
+    """Dependencia que exige que el usuario autenticado tenga el rol indicado."""
+
+    def checker(user: Usuario = Depends(get_current_user)) -> Usuario:
+        if role_name not in [r.nombreRol for r in user.roles]:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "No tienes permiso para esta acción.")
+        return user
+
+    return checker
+
+
 @router.post("/register", response_model=TokenOut, status_code=status.HTTP_201_CREATED)
 def register(data: RegisterIn, db: Session = Depends(get_db)):
-    email = data.email.lower()
+    email = data.email
     if db.scalar(select(Usuario.id).where(Usuario.email == email)):
         raise HTTPException(status.HTTP_409_CONFLICT, "Ya existe una cuenta con ese correo.")
 
@@ -157,39 +172,85 @@ def me(user: Usuario = Depends(get_current_user)):
 
 
 @router.post("/recuperar", response_model=MessageOut)
-def forgot_password(data: ForgotIn, db: Session = Depends(get_db)):
+def forgot_password(
+    data: ForgotIn, background: BackgroundTasks, db: Session = Depends(get_db)
+):
     # Respuesta siempre igual para no revelar qué correos existen.
     generic = MessageOut(
         message="Si existe una cuenta asociada, recibirás un enlace de recuperación."
     )
-    user = db.scalar(select(Usuario).where(Usuario.email == data.email.lower()))
+    user = db.scalar(select(Usuario).where(Usuario.email == data.email))
     if user is None or not user.habilitado or user.bloqueado:
         return generic
 
+    # Límite de solicitudes: un token se creó hace menos de RESET_WINDOW si su
+    # expiración está a más de (vigencia - ventana) minutos en el futuro.
+    now = datetime.utcnow()
+    recent_after = now + timedelta(minutes=settings.RESET_TOKEN_MINUTES - RESET_WINDOW_MINUTES)
+    recent = db.scalar(
+        select(func.count(TokenRecuperacion.id)).where(
+            TokenRecuperacion.ID_usuario == user.id, TokenRecuperacion.expira > recent_after
+        )
+    )
+    if recent >= RESET_MAX_REQUESTS:
+        return generic  # misma respuesta: no se envía ni se revela el límite
+
+    # Un solo enlace vigente por usuario: invalida los anteriores.
+    db.execute(
+        update(TokenRecuperacion)
+        .where(TokenRecuperacion.ID_usuario == user.id, TokenRecuperacion.usado.is_(False))
+        .values(usado=True)
+    )
     token, token_hash = new_reset_token()
     db.add(
         TokenRecuperacion(
             token_hash=token_hash,
-            expira=datetime.utcnow() + timedelta(minutes=settings.RESET_TOKEN_MINUTES),
+            expira=now + timedelta(minutes=settings.RESET_TOKEN_MINUTES),
             ID_usuario=user.id,
         )
     )
+    registro = RegistroCorreo(
+        asunto=RESET_SUBJECT,
+        destinatario=user.email,
+        estado_envio="PENDIENTE",
+        fecha_envio=now,
+        ID_usuario=user.id,
+    )
+    db.add(registro)
     db.commit()
-    send_reset_email(user.email, f"{settings.FRONTEND_URL}/recuperar/nueva?token={token}")
+
+    link = f"{settings.FRONTEND_URL}/recuperar/nueva?token={token}"
+    background.add_task(deliver_reset_email, registro.id, user.email, link)
     return generic
+
+
+def _valid_reset_token(db: Session, token: str) -> TokenRecuperacion:
+    rec = db.scalar(
+        select(TokenRecuperacion).where(TokenRecuperacion.token_hash == hash_reset_token(token))
+    )
+    if rec is None or rec.usado or rec.expira < datetime.utcnow():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "El enlace es inválido o ya expiró.")
+    return rec
+
+
+@router.get("/recuperar/validar", response_model=MessageOut)
+def validate_reset_token(
+    token: str = Query(min_length=10, max_length=200), db: Session = Depends(get_db)
+):
+    """Permite al front comprobar el enlace del correo antes de mostrar el formulario."""
+    _valid_reset_token(db, token)
+    return MessageOut(message="Enlace válido.")
 
 
 @router.post("/recuperar/confirmar", response_model=MessageOut)
 def reset_password(data: ResetIn, db: Session = Depends(get_db)):
-    rec = db.scalar(
-        select(TokenRecuperacion).where(
-            TokenRecuperacion.token_hash == hash_reset_token(data.token)
-        )
-    )
-    if rec is None or rec.usado or rec.expira < datetime.utcnow():
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "El enlace es inválido o ya expiró.")
+    rec = _valid_reset_token(db, data.token)
 
     user = db.get(Usuario, rec.ID_usuario)
+    if verify_password(data.password, user.claveDeUsuario):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "La nueva contraseña debe ser distinta de la actual."
+        )
     user.claveDeUsuario = hash_password(data.password)
     rec.usado = True
     db.commit()

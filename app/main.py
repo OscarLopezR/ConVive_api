@@ -1,10 +1,13 @@
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
-from .routers import auth
+from .errors import validation_exception_handler
+from .routers import admin, auth
 
 app = FastAPI(title="ConVive API", version="0.1.0")
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -15,6 +18,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(admin.router)
 
 
 @app.get("/health", tags=["health"])

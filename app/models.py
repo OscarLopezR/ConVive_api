@@ -76,6 +76,29 @@ class Preferencias(Base):
     ID_usuario: Mapped[int] = mapped_column(ForeignKey("USUARIO.ID"), unique=True)
 
 
+class AccionAdmin(Base):
+    __tablename__ = "ACCION_ADMIN"
+
+    id: Mapped[int] = mapped_column("ID", Integer, primary_key=True, autoincrement=True)
+    accion: Mapped[str] = mapped_column(String(50))
+    tipo_objetivo: Mapped[str] = mapped_column(String(30))
+    id_objetivo: Mapped[int] = mapped_column(Integer)
+    detalle: Mapped[str | None] = mapped_column(String(255))
+    fecha: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    ID_admin: Mapped[int] = mapped_column(ForeignKey("USUARIO.ID"))
+
+
+class RegistroCorreo(Base):
+    __tablename__ = "REGISTRO_CORREO"
+
+    id: Mapped[int] = mapped_column("ID", Integer, primary_key=True, autoincrement=True)
+    asunto: Mapped[str] = mapped_column(String(150))
+    destinatario: Mapped[str] = mapped_column(String(100))
+    estado_envio: Mapped[str] = mapped_column(String(10), default="PENDIENTE")
+    fecha_envio: Mapped[datetime] = mapped_column(DateTime)
+    ID_usuario: Mapped[int] = mapped_column(ForeignKey("USUARIO.ID"))
+
+
 class TokenRecuperacion(Base):
     __tablename__ = "TOKEN_RECUPERACION"
 
