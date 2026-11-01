@@ -21,6 +21,15 @@ jobs:
           DEPLOY_KEY: ${{ secrets.CONVIVE_DEPLOY_KEY }}
         run: |
           install -m 700 -d ~/.ssh
-          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KEY" | tr -d '\r' > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          # Huella pública (no secreta) para detectar un secret mal copiado
+          expected='SHA256:Q3C8YZVF2dU8qpW1sDf90bzr4DxN8S3fVwdQL+ttPV0'
+          if ! pub=$(ssh-keygen -y -f ~/.ssh/deploy_key 2>&1); then
+            echo "::error::CONVIVE_DEPLOY_KEY no es una llave privada válida: $pub"; exit 1
+          fi
+          fp=$(ssh-keygen -lf - <<< "$pub")
+          if [[ "$fp" != *"$expected"* ]]; then
+            echo "::error::CONVIVE_DEPLOY_KEY no coincide con la llave esperada ($expected): $fp"; exit 1
+          fi
           echo '[ssh.tonyquezada.com]:3132 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKlEtr3r2abyUeIH8LA9liFMvKV4JrZoy1wlItq4H/dx' > ~/.ssh/known_hosts
           ssh -i ~/.ssh/deploy_key -p 3132 -o StrictHostKeyChecking=yes tony@ssh.tonyquezada.com
