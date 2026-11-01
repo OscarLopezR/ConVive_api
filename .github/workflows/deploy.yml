@@ -1,0 +1,26 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # La llave CONVIVE_DEPLOY_KEY está restringida en el servidor: solo puede ejecutar
+      # ~/escom-backend/deploy.sh, que hace fast-forward a origin/main y reconstruye.
+      - name: Deploy en tonyServer
+        env:
+          DEPLOY_KEY: ${{ secrets.CONVIVE_DEPLOY_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          echo '[ssh.tonyquezada.com]:3132 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKlEtr3r2abyUeIH8LA9liFMvKV4JrZoy1wlItq4H/dx' > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key -p 3132 -o StrictHostKeyChecking=yes tony@ssh.tonyquezada.com
